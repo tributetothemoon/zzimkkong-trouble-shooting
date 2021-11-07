@@ -28,3 +28,41 @@
 // 프록시 객체를 등록
  beanFactory.registerSingleton("memberRepository", logProxy);
  ```
+ 
+ ## 부록
+ ### createLogProxy() 메소드 상세
+ 
+ ``` Java
+     static <T> T createLogProxy(Object target, Class<T> typeToLog, String logGroup) {
+        final LogProxyHandler logProxyHandler = new LogProxyHandler(target, typeToLog, logGroup);
+        return typeToLog.cast(
+                Proxy.newProxyInstance(
+                        typeToLog.getClassLoader(),
+                        new Class[]{typeToLog},
+                        logProxyHandler));
+    }
+
+    private static class LogProxyHandler implements InvocationHandler {
+        private final Object target;
+        private final Class<?> typeToLog;
+        private final String logGroup;
+
+        private LogProxyHandler(Object target, Class<?> typeToLog, String logGroup) {
+            this.target = target;
+            this.typeToLog = typeToLog;
+            this.logGroup = logGroup;
+        }
+
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            long startTime = System.currentTimeMillis();
+            final Object invokeResult = method.invoke(target, args);
+            long endTime = System.currentTimeMillis();
+            long timeTaken = endTime - startTime;
+
+            logExecutionInfo(typeToLog, method, timeTaken, logGroup);
+
+            return invokeResult;
+        }
+    }
+ ```
