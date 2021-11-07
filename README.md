@@ -31,6 +31,7 @@
  
  ## 부록
  ### createLogProxy() 메소드 상세
+ - 실제 코드에는 메소드와 내부 클래스가 정의된 순서가 조금 다릅니다.
  
  ``` Java
      static <T> T createLogProxy(Object target, Class<T> typeToLog, String logGroup) {
