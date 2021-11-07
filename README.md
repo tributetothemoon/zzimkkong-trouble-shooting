@@ -65,4 +65,11 @@
             return invokeResult;
         }
     }
+    
+    private static void logExecutionInfo(Class<?> typeToLog, Method method, long timeTaken, String logGroup) {
+        log.info("{} took {} ms. (info group by '{}')",
+                value("method", typeToLog.getName() + "." + method.getName() + "()"),
+                value("execution_time", timeTaken),
+                value("group", logGroup));
+    }
  ```
