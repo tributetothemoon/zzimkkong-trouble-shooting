@@ -85,11 +85,9 @@
      static Object createLogProxy(Object target, Class<?> typeToLog, String logGroup) {
         // Advisor 생성
         AspectJExpressionPointcutAdvisor advisor = new AspectJExpressionPointcutAdvisor();
-      
-        // 적용될 클래스와 메소드의 기준 설정, 내부적으로 PointCut 객체를 만들어냅니다.
+
         advisor.setExpression("execution(public * com.woowacourse.zzimkkong..*(..))");
 
-        // 부가기능을 지정, ExecutionTimeLogAdvice는 수행 시간을 측정하라는 부가기능을 담고 있습니다.
         ExecutionTimeLogAdvice advice = new ExecutionTimeLogAdvice(typeToLog, logGroup);
         advisor.setAdvice(advice);
 
@@ -102,7 +100,6 @@
     }
 
 
-    // 참고. ExecutionTimeLogAdvice 클래스 (LogAspect 내부로 감추었습니다.)
     private static class ExecutionTimeLogAdvice implements MethodInterceptor {
         private final Class<?> typeToLog;
         private final String logGroup;
@@ -116,7 +113,6 @@
         public Object invoke(MethodInvocation invocation) throws Throwable {
             long startTime = System.currentTimeMillis();
             
-            // 타겟 인스턴스의 메소드를 실행합니다.
             final Object result = invocation.proceed();
 
             long endTime = System.currentTimeMillis();
@@ -124,10 +120,16 @@
 
             Method method = invocation.getMethod();
             
-            // LogAspect의 로거를 이용하여 로깅하라는 static 메소드
             logExecutionInfo(typeToLog, method, timeTaken, logGroup);
 
             return result;
         }
+    }
+    
+    private static void logExecutionInfo(Class<?> typeToLog, Method method, long timeTaken, String logGroup) {
+        log.info("{} took {} ms. (info group by '{}')",
+                value("method", typeToLog.getName() + "." + method.getName() + "()"),
+                value("execution_time", timeTaken),
+                value("group", logGroup));
     }
  ```
