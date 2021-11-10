@@ -29,8 +29,11 @@
  beanFactory.registerSingleton("memberRepository", logProxy);
  ```
  
+ -----------
+ 
  ## 부록
- ### createLogProxy() 메소드 상세
+
+ ### createLogProxy() 메소드 상세 (원본)
  - 실제 코드에는 메소드와 내부 클래스가 정의된 순서가 조금 다릅니다.
  
  ``` Java
@@ -72,5 +75,59 @@
                 value("method", typeToLog.getName() + "." + method.getName() + "()"),
                 value("execution_time", timeTaken),
                 value("group", logGroup));
+    }
+ ```
+
+
+### 빈 후처리기, `ProxyFactory`를 이용하는 방식으로 업데이트 (현 상황)
+ 
+ ``` Java
+     static Object createLogProxy(Object target, Class<?> typeToLog, String logGroup) {
+        // Advisor 생성
+        AspectJExpressionPointcutAdvisor advisor = new AspectJExpressionPointcutAdvisor();
+      
+        // 적용될 클래스와 메소드의 기준 설정, 내부적으로 PointCut 객체를 만들어냅니다.
+        advisor.setExpression("execution(public * com.woowacourse.zzimkkong..*(..))");
+
+        // 부가기능을 지정, ExecutionTimeLogAdvice는 수행 시간을 측정하라는 부가기능을 담고 있습니다.
+        ExecutionTimeLogAdvice advice = new ExecutionTimeLogAdvice(typeToLog, logGroup);
+        advisor.setAdvice(advice);
+
+        // 프록시를 생성합니다.
+        ProxyFactory proxyFactory = new ProxyFactory(target);
+        proxyFactory.addAdvisor(advisor);
+        proxyFactory.setProxyTargetClass(true);
+
+        return proxyFactory.getProxy();
+    }
+
+
+    // 참고. ExecutionTimeLogAdvice 클래스 (LogAspect 내부로 감추었습니다.)
+    private static class ExecutionTimeLogAdvice implements MethodInterceptor {
+        private final Class<?> typeToLog;
+        private final String logGroup;
+
+        private ExecutionTimeLogAdvice(Class<?> typeToLog, String logGroup) {
+            this.typeToLog = typeToLog;
+            this.logGroup = logGroup;
+        }
+
+        @Override
+        public Object invoke(MethodInvocation invocation) throws Throwable {
+            long startTime = System.currentTimeMillis();
+            
+            // 타겟 인스턴스의 메소드를 실행합니다.
+            final Object result = invocation.proceed();
+
+            long endTime = System.currentTimeMillis();
+            long timeTaken = endTime - startTime;
+
+            Method method = invocation.getMethod();
+            
+            // LogAspect의 로거를 이용하여 로깅하라는 static 메소드
+            logExecutionInfo(typeToLog, method, timeTaken, logGroup);
+
+            return result;
+        }
     }
  ```
