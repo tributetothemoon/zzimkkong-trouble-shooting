@@ -82,13 +82,19 @@
 ### 빈 후처리기, `ProxyFactory`를 이용하는 방식으로 업데이트 (현 상황)
  
  ``` Java
-     static Object createLogProxy(Object target, Class<?> typeToLog, String logGroup) {
+@Component
+@Aspect
+public class LogAspect {
+
+    // 일부 생략
+
+    Object createLogProxy(Object target, Class<?> typeToLog, String logGroup) {
         // Advisor 생성
         AspectJExpressionPointcutAdvisor advisor = new AspectJExpressionPointcutAdvisor();
 
         advisor.setExpression("execution(public * com.woowacourse.zzimkkong..*(..))");
 
-        ExecutionTimeLogAdvice advice = new ExecutionTimeLogAdvice(typeToLog, logGroup);
+        ExecutionTimeLogAdvice advice = new ExecutionTimeLogAdvice(this, typeToLog, logGroup);
         advisor.setAdvice(advice);
 
         // 프록시를 생성합니다.
@@ -98,38 +104,70 @@
 
         return proxyFactory.getProxy();
     }
-
-
-    private static class ExecutionTimeLogAdvice implements MethodInterceptor {
-        private final Class<?> typeToLog;
-        private final String logGroup;
-
-        private ExecutionTimeLogAdvice(Class<?> typeToLog, String logGroup) {
-            this.typeToLog = typeToLog;
-            this.logGroup = logGroup;
-        }
-
-        @Override
-        public Object invoke(MethodInvocation invocation) throws Throwable {
-            long startTime = System.currentTimeMillis();
-            
-            final Object result = invocation.proceed();
-
-            long endTime = System.currentTimeMillis();
-            long timeTaken = endTime - startTime;
-
-            Method method = invocation.getMethod();
-            
-            logExecutionInfo(typeToLog, method, timeTaken, logGroup);
-
-            return result;
-        }
-    }
     
-    private static void logExecutionInfo(Class<?> typeToLog, Method method, long timeTaken, String logGroup) {
-        log.info("{} took {} ms. (info group by '{}')",
+    void logExecutionInfo(Class<?> typeToLog, Method method, long timeTaken, String logGroup) {
+        String traceId = MDC.get("traceId");
+
+        log.info("{} took {} ms. (info group: '{}', traceId: {})",
                 value("method", typeToLog.getName() + "." + method.getName() + "()"),
                 value("execution_time", timeTaken),
-                value("group", logGroup));
+                value("group", logGroup),
+                value("traceId", traceId));
     }
+}
+
+public class ExecutionTimeLogAdvice implements MethodInterceptor {
+    private final LogAspect logAspect;
+    private final Class<?> typeToLog;
+    private final String logGroup;
+
+    protected ExecutionTimeLogAdvice(final LogAspect logAspect, final Class<?> typeToLog, final String logGroup) {
+        this.logAspect = logAspect;
+        this.typeToLog = typeToLog;
+        this.logGroup = logGroup;
+    }
+
+    @Override
+    public Object invoke(MethodInvocation invocation) throws Throwable {
+        long startTime = System.currentTimeMillis();
+        final Object result = invocation.proceed();
+        long endTime = System.currentTimeMillis();
+        long timeTaken = endTime - startTime;
+
+        Method method = invocation.getMethod();
+        logAspect.logExecutionInfo(typeToLog, method, timeTaken, logGroup);
+
+        return result;
+    }
+}
+
+@Component
+public class LogProxyPostProcessor implements BeanPostProcessor {
+    private final LogAspect logAspect;
+    private final Set<Class<?>> typesAnnotatedWith;
+
+    protected LogProxyPostProcessor(final LogAspect logAspect) {
+        this.logAspect = logAspect;
+
+        Reflections reflections = new Reflections("com.woowacourse.zzimkkong");
+        typesAnnotatedWith = Collections.unmodifiableSet(reflections.getTypesAnnotatedWith(FindInstanceAndCreateLogProxy.class));
+    }
+
+    @Override
+    public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+        return typesAnnotatedWith.stream()
+                .filter(typeToLog -> typeToLog.isAssignableFrom(bean.getClass()))
+                .findAny()
+                .map(typeToLog -> createLogProxy(bean, typeToLog))
+                .orElse(bean);
+    }
+
+    private Object createLogProxy(Object bean, Class<?> typeToLog) {
+        FindInstanceAndCreateLogProxy annotation = typeToLog.getAnnotation(FindInstanceAndCreateLogProxy.class);
+        String groupName = annotation.group();
+        return logAspect.createLogProxy(bean, typeToLog, groupName);
+    }
+}
+    
+
  ```
